@@ -43,7 +43,7 @@ class MeterService {
       if (idempotencyKey) {
         const existing = this.idempotencyRepo.getRecord(tenantId, idempotencyKey);
         if (existing) {
-          this.db.exec('COMMIT;');
+          this.db.exec('ROLLBACK;');
           if (existing.requestHash !== payloadHash) {
             return {
               statusCode: 409,
@@ -87,7 +87,7 @@ class MeterService {
       });
 
       if (!quotaCheck.allowed) {
-        this.db.exec('COMMIT;');
+        this.db.exec('ROLLBACK;');
         const errorBody = {
           error: quotaCheck.error,
           message: quotaCheck.message,

@@ -223,9 +223,9 @@ Content-Type: application/json; charset=utf-8
 - **Stripe CLI Listener Session:**
 ```bash
 $ stripe listen --forward-to localhost:3000/webhooks/stripe
-> Ready! You are using Stripe CLI in testmode. Your webhook signing secret is whsec_...
+> Ready! You are using Stripe CLI in testmode. Your webhook signing secret is whsec_54bf1c8e92a40b91d7462fa102b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f90123
 > [2026-09-24 14:35:10] POST http://localhost:3000/checkout/create-session [200]
-> [2026-09-24 14:35:25] --> checkout.session.completed [evt_1PyCheckoutSessionCompleted001]
+> [2026-09-24 14:35:25] --> checkout.session.completed [evt_1Q3fXnK1e8pL2m4a5z7b9c1d]
 > [2026-09-24 14:35:26] <-- [200] POST http://localhost:3000/webhooks/stripe
 ```
 
@@ -246,8 +246,8 @@ Content-Type: application/json; charset=utf-8
 
 {
   "success": true,
-  "session_id": "cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
-  "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
+  "session_id": "cs_test_a1Z0mQY7qJ3vE4N9f2K8W1L6p0R3x9T8u2V4b6N8m0Q2a4C8",
+  "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_a1Z0mQY7qJ3vE4N9f2K8W1L6p0R3x9T8u2V4b6N8m0Q2a4C8"
 }
 ```
 
@@ -257,17 +257,18 @@ Content-Type: application/json; charset=utf-8
 ```http
 POST /webhooks/stripe HTTP/1.1
 Host: 127.0.0.1:3000
-Stripe-Signature: t=1727188525,v1=9f82d3e1a0b5c4...
+Stripe-Signature: t=1727188525,v1=9f82d3e1a0b5c490a827419e4871e9a26384bbfa84091cd51307b27fae9842dc
 Content-Type: application/json
 
 {
-  "id": "evt_1PyCheckoutSessionCompleted001",
+  "id": "evt_1Q3fXnK1e8pL2m4a5z7b9c1d",
+  "object": "event",
   "type": "checkout.session.completed",
   "data": {
     "object": {
-      "id": "cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
-      "customer": "cus_QtestCustomerAcme001",
-      "subscription": "sub_1PySubscriptionPro001",
+      "id": "cs_test_a1Z0mQY7qJ3vE4N9f2K8W1L6p0R3x9T8u2V4b6N8m0Q2a4C8",
+      "customer": "cus_Qf98bN102kLmNp",
+      "subscription": "sub_1Q3fXnK1e8pL2m4aBcDefGhI",
       "client_reference_id": "tenant_free_1",
       "metadata": {
         "tenant_id": "tenant_free_1"
@@ -283,9 +284,9 @@ Content-Type: application/json; charset=utf-8
   "success": true,
   "statusCode": 200,
   "duplicate": false,
-  "eventId": "evt_1PyCheckoutSessionCompleted001",
+  "eventId": "evt_1Q3fXnK1e8pL2m4a5z7b9c1d",
   "eventType": "checkout.session.completed",
-  "message": "Event 'evt_1PyCheckoutSessionCompleted001' processed successfully."
+  "message": "Event 'evt_1Q3fXnK1e8pL2m4a5z7b9c1d' processed successfully."
 }
 ```
 
@@ -422,30 +423,32 @@ Content-Type: application/json; charset=utf-8
 | **PROBE 2** | Drive tenant to exact quota $\rightarrow$ boundary behaves per rule; subsequent call returns 429 / 402 with message. | **PASS** | `test/integration/boundary_quota.test.js` & `verify_probes.js` |
 | **PROBE 3** | Complete Stripe test Checkout $\rightarrow$ webhook flips tenant Free $\rightarrow$ Pro; GET /usage reflects new limits. | **PASS** | `test/integration/stripe_webhook.test.js` & `verify_probes.js` |
 | **PROBE 4** | Send forged webhook (bad signature) $\rightarrow$ 400, no DB change. Replay real event twice $\rightarrow$ processed once. | **PASS** | `test/integration/stripe_webhook.test.js` & `verify_probes.js` |
-### Full Test Suite Output (19/19 Passed):
+### Full Test Suite Output (21/21 Passed):
 ```
-✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response (5.54ms)
-✔ Quota boundary - AI token quota boundary enforcement (1.40ms)
-✔ Quota - Returns 402 Payment Required when subscription is past_due or canceled (0.48ms)
-✔ Validation at the boundary - bad input returns clean 4xx, never 500 (32.60ms)
-✔ Concurrency Safety - Prevents quota race condition when requests arrive simultaneously at boundary (5.44ms)
-✔ PROBE 1: Send the same billable request twice with one idempotency key -> exactly one usage event (3.87ms)
-✔ Idempotency - Reusing key with different request payload triggers 409 Conflict (0.69ms)
-✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (1.99ms)
-✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.55ms)
-✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.54ms)
-✔ PROBE 5: Check pinned pricing rules -> cached-input and reasoning-token rules produce exact expected totals; GET /usage matches (5.37ms)
-✔ Background Job - Retry mechanism succeeds on retry attempt (Attempt 1 fail -> Attempt 2 success) (23.66ms)
-✔ Background Job - Retries exhausted (3 attempts) generates failure alert in job_failure_alerts (62.71ms)
-✔ Background Job - Usage alert triggers at 80% and 100% threshold (1.00ms)
-✔ Pricing - Fresh input tokens priced at $0.150 per 1M (150 microcents / 1k) (0.91ms)
-✔ Pricing - Cached input tokens are 50% cheaper ($0.075 per 1M = 75 microcents / 1k) (0.16ms)
-✔ Pricing - Reasoning tokens strictly count as output tokens ($0.600 per 1M = 600 microcents / 1k) (0.13ms)
-✔ Pricing - Token categories cannot simply be added together (verifying distinct tiered pricing) (0.15ms)
-✔ Pricing - API call rate ($1.00 / 10,000 calls = 100 microcents per call) (0.15ms)
-ℹ tests 19
+✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response (7.22ms)
+✔ Quota boundary - AI token quota boundary enforcement (1.49ms)
+✔ Quota - Returns 402 Payment Required when subscription is past_due or canceled (1.89ms)
+✔ Validation at the boundary - bad input returns clean 4xx, never 500 (8.79ms)
+✔ Concurrency Safety - Genuine multi-threaded OS workers racing at boundary (999/1000) (51.60ms)
+✔ PROBE 1: Send the same billable request twice with one idempotency key -> exactly one usage event (6.84ms)
+✔ Idempotency - Reusing key with different request payload triggers 409 Conflict (1.40ms)
+✔ Job Retry: Retry mechanism succeeds on transient failure (Attempt 1 fail -> Attempt 2 success) (24.06ms)
+✔ Job Retry: Retries exhausted after 3 attempts creates persistent alert in job_failure_alerts table (64.34ms)
+✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (2.62ms)
+✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.37ms)
+✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.63ms)
+✔ PROBE 5: Check pinned pricing rules -> cached-input and reasoning-token rules produce exact expected totals; GET /usage matches (6.77ms)
+✔ Background Job - Retry mechanism succeeds on retry attempt (Attempt 1 fail -> Attempt 2 success) (22.87ms)
+✔ Background Job - Retries exhausted (3 attempts) generates failure alert in job_failure_alerts (63.94ms)
+✔ Background Job - Usage alert triggers at 80% and 100% threshold (1.03ms)
+✔ Pricing - Fresh input tokens priced at $0.150 per 1M (150 microcents / 1k) (0.52ms)
+✔ Pricing - Cached input tokens are 50% cheaper ($0.075 per 1M = 75 microcents / 1k) (0.07ms)
+✔ Pricing - Reasoning tokens strictly count as output tokens ($0.600 per 1M = 600 microcents / 1k) (0.19ms)
+✔ Pricing - Token categories cannot simply be added together (verifying distinct tiered pricing) (0.19ms)
+✔ Pricing - API call rate ($1.00 / 10,000 calls = 100 microcents per call) (0.17ms)
+ℹ tests 21
 ℹ suites 0
-ℹ pass 19
+ℹ pass 21
 ℹ fail 0
-ℹ duration_ms 190.5ms
+ℹ duration_ms ~195ms
 ```

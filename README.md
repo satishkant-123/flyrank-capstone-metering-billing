@@ -1,6 +1,6 @@
 # Usage Metering & Billing Engine
 
-[![Tests](https://img.shields.io/badge/tests-19%20passed-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-21%20passed-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org/)
 
@@ -242,7 +242,7 @@ Run the full deterministic test suite in one command:
 npm test
 ```
 
-All 19 tests covering the 5 acceptance probes, unit pricing, boundary conditions, concurrency safety, and background jobs will execute:
+All 21 tests covering the 5 acceptance probes, unit pricing, boundary conditions, concurrency safety, and background job retries will execute:
 ```
 ✔ PROBE 1: Send the same billable request twice with one idempotency key -> exactly one usage event
 ✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response
