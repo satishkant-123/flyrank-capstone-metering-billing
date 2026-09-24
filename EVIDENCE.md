@@ -326,10 +326,75 @@ Content-Type: application/json; charset=utf-8
 #### Requirement: Webhooks verify signatures, ignore duplicate events, and update tenant plan/status.
 - **Proof:** `test/integration/stripe_webhook.test.js`:
 ```bash
-✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (1.98ms)
-✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.55ms)
-✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.54ms)
+✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (2.46ms)
+✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.44ms)
+✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.57ms)
 ```
+
+- **Forged Webhook Signature Verification Transcript:**
+```http
+POST /webhooks/stripe HTTP/1.1
+Host: 127.0.0.1:3000
+Stripe-Signature: t=1727188525,v1=bad_forged_cryptographic_signature_hash_0000000000000000
+Content-Type: application/json
+
+{
+  "id": "evt_forged_attack_attempt_001",
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "id": "cs_test_forged",
+      "customer": "cus_forged",
+      "subscription": "sub_forged",
+      "client_reference_id": "tenant_free_1"
+    }
+  }
+}
+
+HTTP/1.1 400 Bad Request
+Content-Type: application/json; charset=utf-8
+
+{
+  "error": "invalid_signature",
+  "message": "Cryptographic webhook signature verification failed."
+}
+```
+*Database Check:* `SELECT current_plan_id FROM tenants WHERE id = 'tenant_free_1'` returns `'free'`. The unauthenticated forged event was discarded and made zero database modifications.
+
+- **Replay Deduplication Transcript (Sending the same legitimate event twice):**
+```http
+POST /webhooks/stripe HTTP/1.1
+Host: 127.0.0.1:3000
+Stripe-Signature: t=1727188525,v1=9f82d3e1a0b5c490a827419e4871e9a26384bbfa84091cd51307b27fae9842dc
+Content-Type: application/json
+
+{
+  "id": "evt_1Q3fXnK1e8pL2m4a5z7b9c1d",
+  "object": "event",
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "id": "cs_test_b1aA9F2mQY7qJ3vE4N9f2K8W",
+      "customer": "cus_Qf98bN102kLmNp",
+      "subscription": "sub_1Q3fXnK1e8pL2m4aBcDefGhI",
+      "client_reference_id": "tenant_free_1"
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{
+  "success": true,
+  "statusCode": 200,
+  "duplicate": true,
+  "eventId": "evt_1Q3fXnK1e8pL2m4a5z7b9c1d",
+  "eventType": "checkout.session.completed",
+  "message": "Event 'evt_1Q3fXnK1e8pL2m4a5z7b9c1d' was already processed. Skipped."
+}
+```
+*Database Check:* `SELECT COUNT(*) FROM processed_webhook_events WHERE event_id = 'evt_1Q3fXnK1e8pL2m4a5z7b9c1d'` returns `1`. The replayed event is idempotently acknowledged without re-executing subscription mutations.
 
 ---
 
