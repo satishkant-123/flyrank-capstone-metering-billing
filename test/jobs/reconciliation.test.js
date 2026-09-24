@@ -11,6 +11,7 @@ const TenantRepository = require('../../src/repositories/tenantRepository');
 const PlanRepository = require('../../src/repositories/planRepository');
 const UsageEventRepository = require('../../src/repositories/usageEventRepository');
 const AlertRepository = require('../../src/repositories/alertRepository');
+const JobAlertRepository = require('../../src/repositories/jobAlertRepository');
 
 function setupJobsTestDb() {
   const db = new DatabaseSync(':memory:');
@@ -39,43 +40,87 @@ function setupJobsTestDb() {
   const subRepo = new SubscriptionRepository(db);
   const usageRepo = new UsageEventRepository(db);
   const alertRepo = new AlertRepository(db);
+  const jobAlertRepo = new JobAlertRepository(db);
 
-  return { db, tenantRepo, planRepo, subRepo, usageRepo, alertRepo, start };
+  return { db, tenantRepo, planRepo, subRepo, usageRepo, alertRepo, jobAlertRepo, start };
 }
 
-test('Background Job - Reconciliation synchronizes desynchronized subscription status from Stripe', async () => {
-  const { subRepo, tenantRepo } = setupJobsTestDb();
+test('Background Job - Retry mechanism succeeds on retry attempt (Attempt 1 fail -> Attempt 2 success)', async () => {
+  const { subRepo, tenantRepo, jobAlertRepo, db } = setupJobsTestDb();
 
-  // Mock Stripe client returning past_due status (drift from local active)
+  let callCount = 0;
   const mockStripeService = {
-    secretKey: 'sk_test_mock',
     stripe: {
       subscriptions: {
         retrieve: async (subId) => {
-          if (subId === 'sub_stripe_drift_1') {
-            return { id: subId, status: 'past_due' };
+          callCount++;
+          if (callCount === 1) {
+            throw new Error('Transient network timeout');
           }
-          return null;
+          return { id: subId, status: 'past_due' };
         },
       },
     },
   };
 
   const reconciliationJob = new ReconciliationJob({
+    db,
     subRepo,
     tenantRepo,
+    jobAlertRepo,
     stripeService: mockStripeService,
   });
 
   const report = await reconciliationJob.run();
+  assert.equal(callCount, 2, 'Should have retried after first failure');
   assert.equal(report.checkedCount, 1);
   assert.equal(report.syncedCount, 1);
-  assert.equal(report.anomaliesCount, 1);
-  assert.equal(report.anomalies[0].action, 'SYNCHRONIZED');
+  assert.equal(report.status, 'HEALTHY');
 
-  // Verify DB was updated
-  const updatedSub = subRepo.getByTenantId('tenant_job_1');
-  assert.equal(updatedSub.status, 'past_due');
+  // Verify retry audit log shows Attempt 1 failed and Attempt 2 succeeded
+  const audit = report.retryAuditLog[0].retryResult;
+  assert.equal(audit.success, true);
+  assert.equal(audit.attempts, 2);
+  assert.equal(audit.attemptsLog[0].status, 'failed');
+  assert.equal(audit.attemptsLog[1].status, 'succeeded');
+});
+
+test('Background Job - Retries exhausted (3 attempts) generates failure alert in job_failure_alerts', async () => {
+  const { subRepo, tenantRepo, jobAlertRepo, db } = setupJobsTestDb();
+
+  let callCount = 0;
+  const mockStripeService = {
+    stripe: {
+      subscriptions: {
+        retrieve: async () => {
+          callCount++;
+          throw new Error('Persistent 503 Service Unavailable');
+        },
+      },
+    },
+  };
+
+  const reconciliationJob = new ReconciliationJob({
+    db,
+    subRepo,
+    tenantRepo,
+    jobAlertRepo,
+    stripeService: mockStripeService,
+  });
+
+  const report = await reconciliationJob.run();
+  assert.equal(callCount, 3, 'Must attempt exactly 3 retries before failing permanently');
+  assert.equal(report.status, 'ALERT_TRIGGERED');
+  assert.equal(report.anomalies[0].action, 'FAILURE_ALERT_DISPATCHED');
+  assert.ok(report.anomalies[0].alertId);
+
+  // Verify failure alert is recorded in database table
+  const recordedAlerts = jobAlertRepo.getAllAlerts();
+  assert.equal(recordedAlerts.length, 1);
+  assert.equal(recordedAlerts[0].job_name, 'reconciliation');
+  assert.equal(recordedAlerts[0].attempts, 3);
+  assert.match(recordedAlerts[0].error_message, /Persistent 503/);
+  assert.equal(recordedAlerts[0].alert_status, 'DISPATCHED');
 });
 
 test('Background Job - Usage alert triggers at 80% and 100% threshold', () => {

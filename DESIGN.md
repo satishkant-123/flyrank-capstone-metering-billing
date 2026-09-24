@@ -232,7 +232,7 @@ AI Token costs depend strictly on the category of token:
 - **Cached Input Tokens (Cheaper):** \$0.075 per 1M tokens (50% discount) = 75 microcents / 1,000 tokens
 - **Output Tokens:** \$0.600 per 1M tokens = 600 microcents / 1,000 tokens
 - **Reasoning Tokens:** Billed as **Output Tokens** (\$0.600 per 1M tokens), never free or added to input
-- **Base API Calls:** \$1.00 per 10,000 calls = 10 microcents per call
+- **Base API Calls:** \$1.00 per 10,000 calls = 100 microcents per call
 
 ### Mathematical Formulation:
 $$\text{Cost}_{\text{microcents}} = \lfloor \frac{\text{cached} \times 75 + \text{fresh} \times 150 + (\text{output} + \text{reasoning}) \times 600}{1000} \rfloor$$

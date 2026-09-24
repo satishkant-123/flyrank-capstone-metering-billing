@@ -80,6 +80,16 @@ CREATE TABLE IF NOT EXISTS usage_alerts (
   UNIQUE(tenant_id, resource, threshold_percent, period)
 );
 
+-- 8. Background Job Failure Alerts (Track permanent job failures after retries)
+CREATE TABLE IF NOT EXISTS job_failure_alerts (
+  id TEXT PRIMARY KEY,
+  job_name TEXT NOT NULL,
+  error_message TEXT NOT NULL,
+  attempts INTEGER NOT NULL,
+  alert_status TEXT NOT NULL, -- 'DISPATCHED'
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Indexes for performance & isolation
 CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_created ON usage_events (tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_usage_events_idempotency ON usage_events (idempotency_key);

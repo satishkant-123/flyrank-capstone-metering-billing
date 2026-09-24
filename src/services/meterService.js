@@ -23,7 +23,8 @@ class MeterService {
   }
 
   /**
-   * Record a billable event idempotently.
+   * Record a billable event idempotently and atomically under concurrent load.
+   * Concurrency protection: Uses SQLite BEGIN IMMEDIATE to lock writer before checking quota.
    */
   record({
     tenantId,
@@ -35,108 +36,110 @@ class MeterService {
   }) {
     const payloadHash = this.hashPayload(requestPayload || { eventType, tokenBreakdown, apiCallCount });
 
-    // 1. Idempotency Check
-    if (idempotencyKey) {
-      const existing = this.idempotencyRepo.getRecord(tenantId, idempotencyKey);
-      if (existing) {
-        if (existing.requestHash !== payloadHash) {
+    // Begin atomic immediate transaction to serialize concurrent quota checks and inserts
+    this.db.exec('BEGIN IMMEDIATE TRANSACTION;');
+    try {
+      // 1. Idempotency Check
+      if (idempotencyKey) {
+        const existing = this.idempotencyRepo.getRecord(tenantId, idempotencyKey);
+        if (existing) {
+          this.db.exec('COMMIT;');
+          if (existing.requestHash !== payloadHash) {
+            return {
+              statusCode: 409,
+              body: {
+                error: 'idempotency_conflict',
+                message: `Idempotency key '${idempotencyKey}' was previously used with a different request payload.`,
+              },
+              isIdempotentReplay: true,
+            };
+          }
+
           return {
-            statusCode: 409,
-            body: {
-              error: 'idempotency_conflict',
-              message: `Idempotency key '${idempotencyKey}' was previously used with a different request payload.`,
-            },
+            statusCode: existing.responseStatus,
+            body: existing.responseBody,
             isIdempotentReplay: true,
           };
         }
+      }
+
+      // 2. Determine quantity and pricing
+      let quantity = 0;
+      let costMicrocents = 0;
+      let pricingResult = null;
+
+      if (eventType === 'ai_tokens') {
+        pricingResult = PricingService.calculateTokenCost(tokenBreakdown);
+        quantity = pricingResult.total_tokens;
+        costMicrocents = pricingResult.cost_microcents;
+      } else {
+        // api_call
+        pricingResult = PricingService.calculateApiCallCost(apiCallCount);
+        quantity = pricingResult.api_calls;
+        costMicrocents = pricingResult.cost_microcents;
+      }
+
+      // 3. Quota Enforcement (Evaluated inside locked transaction)
+      const quotaCheck = this.quotaService.checkQuota({
+        tenantId,
+        requestedType: eventType,
+        requestedQty: quantity,
+      });
+
+      if (!quotaCheck.allowed) {
+        this.db.exec('COMMIT;');
+        const errorBody = {
+          error: quotaCheck.error,
+          message: quotaCheck.message,
+          resource: quotaCheck.resource,
+          limit: quotaCheck.limit,
+          used: quotaCheck.used,
+          requested: quotaCheck.requested,
+          remaining: quotaCheck.remaining,
+        };
+
+        if (quotaCheck.subscription_status) {
+          errorBody.subscription_status = quotaCheck.subscription_status;
+        }
 
         return {
-          statusCode: existing.responseStatus,
-          body: existing.responseBody,
-          isIdempotentReplay: true,
+          statusCode: quotaCheck.statusCode,
+          body: errorBody,
+          headers: quotaCheck.retryAfter ? { 'Retry-After': String(quotaCheck.retryAfter) } : {},
+          isIdempotentReplay: false,
         };
       }
-    }
 
-    // 2. Determine quantity and pricing
-    let quantity = 0;
-    let costMicrocents = 0;
-    let pricingResult = null;
+      // 4. Persistence within ACID Transaction
+      const eventId = `evt_${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
 
-    if (eventType === 'ai_tokens') {
-      pricingResult = PricingService.calculateTokenCost(tokenBreakdown);
-      quantity = pricingResult.total_tokens;
-      costMicrocents = pricingResult.cost_microcents;
-    } else {
-      // api_call
-      pricingResult = PricingService.calculateApiCallCost(apiCallCount);
-      quantity = pricingResult.api_calls;
-      costMicrocents = pricingResult.cost_microcents;
-    }
-
-    // 3. Quota Enforcement
-    const quotaCheck = this.quotaService.checkQuota({
-      tenantId,
-      requestedType: eventType,
-      requestedQty: quantity,
-    });
-
-    if (!quotaCheck.allowed) {
-      const errorBody = {
-        error: quotaCheck.error,
-        message: quotaCheck.message,
-        resource: quotaCheck.resource,
-        limit: quotaCheck.limit,
-        used: quotaCheck.used,
-        requested: quotaCheck.requested,
-        remaining: quotaCheck.remaining,
+      const responseBody = {
+        success: true,
+        event_id: eventId,
+        tenant_id: tenantId,
+        event_type: eventType,
+        quantity,
+        cost_microcents: costMicrocents,
+        cost_usd: pricingResult.cost_usd,
+        cost_cents: pricingResult.cost_cents,
+        breakdown: eventType === 'ai_tokens' ? {
+          cached_input_tokens: pricingResult.cached_input_tokens,
+          fresh_input_tokens: pricingResult.fresh_input_tokens,
+          output_tokens: pricingResult.output_tokens,
+          reasoning_tokens: pricingResult.reasoning_tokens,
+        } : {
+          api_calls: pricingResult.api_calls,
+        },
+        quota_balance: {
+          resource: quotaCheck.resource,
+          limit: quotaCheck.limit,
+          used: quotaCheck.newUsage,
+          remaining: quotaCheck.remaining,
+        },
+        timestamp: now,
       };
 
-      if (quotaCheck.subscription_status) {
-        errorBody.subscription_status = quotaCheck.subscription_status;
-      }
-
-      return {
-        statusCode: quotaCheck.statusCode,
-        body: errorBody,
-        headers: quotaCheck.retryAfter ? { 'Retry-After': String(quotaCheck.retryAfter) } : {},
-        isIdempotentReplay: false,
-      };
-    }
-
-    // 4. Persistence within ACID Transaction
-    const eventId = `evt_${crypto.randomUUID()}`;
-    const now = new Date().toISOString();
-
-    const responseBody = {
-      success: true,
-      event_id: eventId,
-      tenant_id: tenantId,
-      event_type: eventType,
-      quantity,
-      cost_microcents: costMicrocents,
-      cost_usd: pricingResult.cost_usd,
-      cost_cents: pricingResult.cost_cents,
-      breakdown: eventType === 'ai_tokens' ? {
-        cached_input_tokens: pricingResult.cached_input_tokens,
-        fresh_input_tokens: pricingResult.fresh_input_tokens,
-        output_tokens: pricingResult.output_tokens,
-        reasoning_tokens: pricingResult.reasoning_tokens,
-      } : {
-        api_calls: pricingResult.api_calls,
-      },
-      quota_balance: {
-        resource: quotaCheck.resource,
-        limit: quotaCheck.limit,
-        used: quotaCheck.newUsage,
-        remaining: quotaCheck.remaining,
-      },
-      timestamp: now,
-    };
-
-    // Execute atomic insert
-    this.db.exec('BEGIN TRANSACTION;');
-    try {
       this.usageRepo.insert({
         id: eventId,
         tenant_id: tenantId,
@@ -156,17 +159,21 @@ class MeterService {
       }
 
       this.db.exec('COMMIT;');
+
+      return {
+        statusCode: 200,
+        body: responseBody,
+        headers: {},
+        isIdempotentReplay: false,
+      };
     } catch (err) {
-      this.db.exec('ROLLBACK;');
+      try {
+        this.db.exec('ROLLBACK;');
+      } catch {
+        // Transaction may already be closed
+      }
       throw err;
     }
-
-    return {
-      statusCode: 200,
-      body: responseBody,
-      headers: {},
-      isIdempotentReplay: false,
-    };
   }
 }
 

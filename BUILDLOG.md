@@ -62,13 +62,33 @@ This capstone was constructed using AI pair-programming with the DeepMind Antigr
 - **What I Changed:**  
   Established integer microcents ($1.00 = 1,000,000 microcents; 1 cent = 10,000 microcents) throughout the database schema and domain models, pinning token rates per 1,000 tokens with integer `Math.round()` calculations.
 
+### 3.5. Concurrency Race Condition at Quota Boundaries
+- **What AI Initially Wrote:**  
+  Quota check was evaluated before opening the database transaction, allowing two concurrent requests at 999/1,000 to both pass the check before either committed.
+- **What I Changed:**  
+  Wrapped the entire check-and-insert sequence inside an atomic `BEGIN IMMEDIATE TRANSACTION;` in SQLite. This locks the write reservation immediately so simultaneous requests are strictly serialized, ensuring one request succeeds and the other receives HTTP 429.
+
+### 3.6. Background Job Retries & Exponential Backoff
+- **What AI Initially Wrote:**  
+  The reconciliation job caught API exceptions and recorded an anomaly without retrying.
+- **What I Changed:**  
+  Implemented `executeWithRetry()` with 3 attempts and exponential backoff (`delay = baseDelay * 2^(attempt-1)`). Temporary network blips resolve on retry #2, avoiding false positive alerts.
+
+### 3.7. Background Job Failure Alert Table
+- **What AI Initially Wrote:**  
+  Failed background jobs only printed to `console.error`.
+- **What I Changed:**  
+  Created the `job_failure_alerts` schema table and `JobAlertRepository` to record persistent job failures as structured database records when retries are exhausted.
+
 ---
 
 ## 4. Key Lines of Code & Explanations
 
-1. **`src/services/meterService.js` (Lines 40–55):**  
-   Evaluates composite idempotency key `${tenantId}:${idempotencyKey}`. If a matching key exists, it compares the SHA-256 payload hash. If matching, it replays the cached 200 response with `Idempotent-Replay: true` header without executing database inserts.
+1. **`src/services/meterService.js` (Lines 35–65):**  
+   Opens `BEGIN IMMEDIATE TRANSACTION` to atomically evaluate idempotency and current quota balances before inserting billable records, completely preventing race conditions under concurrent load.
 2. **`src/services/quotaService.js` (Lines 60–85):**  
    Pre-checks resource limits `currentUsage + requestedQty > limit`. If true, returns status `429 Too Many Requests` with `Retry-After: 3600` header before any billable work is metered.
-3. **`src/services/pricingService.js` (Lines 25–45):**  
+3. **`src/jobs/reconciliationJob.js` (Lines 20–55):**  
+   Executes Stripe reconciliation passes with 3 exponential backoff retries. If all retries fail, dispatches a persistent alert recorded into the `job_failure_alerts` table.
+4. **`src/services/pricingService.js` (Lines 25–45):**  
    Encodes the AI token pricing rules: cached input tokens are billed at a 50% discount (75 microcents/1k), fresh input at 150 microcents/1k, output at 600 microcents/1k, and reasoning tokens strictly at 600 microcents/1k (output rate).
