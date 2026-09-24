@@ -267,27 +267,28 @@ Content-Type: application/json; charset=utf-8
 | **PROBE 4** | Send forged webhook (bad signature) $\rightarrow$ 400, no DB change. Replay real event twice $\rightarrow$ processed once. | **PASS** | `test/integration/stripe_webhook.test.js` & `verify_probes.js` |
 | **PROBE 5** | Check pinned pricing rules $\rightarrow$ cached-input & reasoning tokens match expected totals; GET /usage matches. | **PASS** | `test/integration/usage_rollup.test.js` & `verify_probes.js` |
 
-### Full Test Suite Output (16/16 Passed):
+### Full Test Suite Output (17/17 Passed):
 ```
-✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response (5.391959ms)
-✔ Quota boundary - AI token quota boundary enforcement (1.012ms)
-✔ Quota - Returns 402 Payment Required when subscription is past_due or canceled (0.459792ms)
-✔ PROBE 1: Send the same billable request twice with one idempotency key -> exactly one usage event (4.712ms)
-✔ Idempotency - Reusing key with different request payload triggers 409 Conflict (0.622166ms)
-✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (2.495042ms)
-✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.867167ms)
-✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.570625ms)
-✔ PROBE 5: Check pinned pricing rules -> cached-input and reasoning-token rules produce exact expected totals; GET /usage matches (3.565ms)
-✔ Background Job - Reconciliation synchronizes desynchronized subscription status from Stripe (1.907875ms)
-✔ Background Job - Usage alert triggers at 80% and 100% threshold (0.96275ms)
-✔ Pricing - Fresh input tokens priced at $0.150 per 1M (150 microcents / 1k) (0.411042ms)
-✔ Pricing - Cached input tokens are 50% cheaper ($0.075 per 1M = 75 microcents / 1k) (0.066834ms)
-✔ Pricing - Reasoning tokens strictly count as output tokens ($0.600 per 1M = 600 microcents / 1k) (0.062083ms)
-✔ Pricing - Token categories cannot simply be added together (verifying distinct tiered pricing) (0.065458ms)
-✔ Pricing - API call rate ($1.00 / 10,000 calls = 100 microcents per call) (0.063625ms)
-ℹ tests 16
+✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response (3.942792ms)
+✔ Quota boundary - AI token quota boundary enforcement (1.911125ms)
+✔ Quota - Returns 402 Payment Required when subscription is past_due or canceled (0.983042ms)
+✔ Validation at the boundary - bad input returns clean 4xx, never 500 (24.263333ms)
+✔ PROBE 1: Send the same billable request twice with one idempotency key -> exactly one usage event (5.33825ms)
+✔ Idempotency - Reusing key with different request payload triggers 409 Conflict (0.666625ms)
+✔ PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant Free -> Pro; GET /usage shows the new limits (2.381042ms)
+✔ PROBE 4: Send a forged webhook (bad signature) -> 400, nothing changes. Replay a real event twice -> processed once (1.881666ms)
+✔ Webhook - customer.subscription.deleted downgrades tenant back to Free (0.621791ms)
+✔ PROBE 5: Check pinned pricing rules -> cached-input and reasoning-token rules produce exact expected totals; GET /usage matches (7.308958ms)
+✔ Background Job - Reconciliation synchronizes desynchronized subscription status from Stripe (1.71175ms)
+✔ Background Job - Usage alert triggers at 80% and 100% threshold (0.899958ms)
+✔ Pricing - Fresh input tokens priced at $0.150 per 1M (150 microcents / 1k) (0.40475ms)
+✔ Pricing - Cached input tokens are 50% cheaper ($0.075 per 1M = 75 microcents / 1k) (0.065583ms)
+✔ Pricing - Reasoning tokens strictly count as output tokens ($0.600 per 1M = 600 microcents / 1k) (0.061417ms)
+✔ Pricing - Token categories cannot simply be added together (verifying distinct tiered pricing) (0.065708ms)
+✔ Pricing - API call rate ($1.00 / 10,000 calls = 100 microcents per call) (0.067209ms)
+ℹ tests 17
 ℹ suites 0
-ℹ pass 16
+ℹ pass 17
 ℹ fail 0
-ℹ duration_ms 79.806791
+ℹ duration_ms 145.005833
 ```

@@ -17,6 +17,14 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // Syntax error from express body-parser
+  if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && (err.status === 400 || err.statusCode === 400))) {
+    return res.status(400).json({
+      error: 'invalid_json',
+      message: 'The request body could not be parsed as valid JSON.',
+    });
+  }
+
   if (err.status && err.status < 500) {
     return res.status(err.status).json({
       error: err.code || 'bad_request',
@@ -28,14 +36,6 @@ function errorHandler(err, req, res, next) {
     return res.status(err.statusCode).json({
       error: err.code || 'bad_request',
       message: err.message,
-    });
-  }
-
-  // Syntax error from body-parser
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({
-      error: 'invalid_json',
-      message: 'The request body could not be parsed as valid JSON.',
     });
   }
 

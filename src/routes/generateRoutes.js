@@ -14,8 +14,20 @@ function handleGenerate(req, res, next) {
 
     let tokenBreakdown = {};
     if (eventType === 'ai_tokens') {
-      if (req.body?.simulate_tokens) {
-        tokenBreakdown = req.body.simulate_tokens;
+      const source = req.body?.simulate_tokens || req.body?.tokens || req.body || {};
+      const hasTokenFields = source.cached_input_tokens !== undefined ||
+                             source.fresh_input_tokens !== undefined ||
+                             source.input_tokens !== undefined ||
+                             source.output_tokens !== undefined ||
+                             source.reasoning_tokens !== undefined;
+
+      if (hasTokenFields) {
+        tokenBreakdown = {
+          cached_input_tokens: source.cached_input_tokens || 0,
+          fresh_input_tokens: source.fresh_input_tokens !== undefined ? source.fresh_input_tokens : (source.input_tokens || 0),
+          output_tokens: source.output_tokens || 0,
+          reasoning_tokens: source.reasoning_tokens || 0,
+        };
       } else {
         // Fallback default simulation: 1,000 fresh input tokens + 500 output tokens
         tokenBreakdown = {
