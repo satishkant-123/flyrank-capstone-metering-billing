@@ -241,18 +241,23 @@ Using integer arithmetic prevents cumulative float discrepancies across millions
 
 ---
 
-## 6. Idempotency Strategy
+## 6. Idempotency Strategy & Atomic Concurrency Control
 1. Client generates and sends `Idempotency-Key` (e.g. UUIDv4).
-2. Inside an ACID transaction:
-   - Check if `(tenant_id, key)` exists in `idempotency_keys`.
-   - If found:
-     - Verify `request_hash`. If body differs, return `409 Conflict`.
-     - Return cached status and cached response immediately without creating a new usage event.
-   - If not found:
-     - Perform quota check. If exceeded, return `429` (and do not record usage).
-     - If permitted, insert record into `usage_events`.
-     - Store resulting response in `idempotency_keys`.
-     - Commit transaction.
+2. The entire metering operation executes within an atomic `BEGIN IMMEDIATE TRANSACTION`:
+   - SQLite `BEGIN IMMEDIATE` immediately acquires a reserved lock on the database before any reads occur. This eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions between concurrent OS threads or parallel workers.
+   - **Step 1: Check Idempotency Cache:**
+     - Query `idempotency_keys` for `(tenant_id, key)`.
+     - If key exists:
+       - Validate SHA-256 `request_hash`. If payload differs, rollback and return `409 Conflict`.
+       - Return cached status code, headers, and cached response body immediately without inserting a duplicate usage event.
+   - **Step 2: Subscription & Quota Balance Evaluation (Locked Writer):**
+     - Verify tenant subscription status (`active`, `trialing`). If lapsed/past-due, rollback and return `402 Payment Required`.
+     - Query aggregate usage sum for current billing cycle.
+     - Evaluate if `current_usage + requested_usage > limit`. If exceeded, rollback and return `429 Too Many Requests` (zero usage recorded).
+   - **Step 3: Atomic Record Insertion & Key Caching:**
+     - Insert record into `usage_events` with calculated integer microcents.
+     - Store resulting HTTP status (200) and response payload into `idempotency_keys`.
+     - Commit transaction atomically via `COMMIT`.
 
 ---
 
@@ -265,9 +270,24 @@ Using integer arithmetic prevents cumulative float discrepancies across millions
   - Request is **rejected with 429** before consuming resources because `99,500 + 600 > 100,000`.
 - **402 Payment Required** is returned when a customer's subscription has lapsed, is past due, or requires an immediate upgrade rather than simple rate throttle.
 
+### 7.1. Concurrency Race Condition Safety
+- Because quota evaluation occurs **inside** the `BEGIN IMMEDIATE` write-locked transaction, concurrent workers cannot read a stale quota balance before another worker commits.
+- Verified deterministically in `test/integration/concurrency_quota.test.js` using Node.js `worker_threads`: two OS threads concurrently racing to claim slot 1,000 results in exactly one 200 OK and one 429 Too Many Requests, with the final database usage never exceeding 1,000.
+
 ---
 
-## 8. Explicit Non-Goals
+## 8. Background Reconciliation & Alerting Architecture
+- **Scheduled Reconciliation:** Runs via `reconciliationJob.js` to reconcile Stripe subscription states against local database subscriptions.
+- **Retry Mechanism (3 Attempts with Exponential Backoff):**
+  - Staggered retries for transient Stripe API failures: Attempt 1 -> Backoff (50ms base) -> Attempt 2 -> Backoff (100ms) -> Attempt 3.
+  - If a retry succeeds, synchronization completes and state is marked `HEALTHY`.
+- **Persistent Job Failure Alerts:**
+  - If all 3 attempts fail, a critical alert is persisted into the `job_failure_alerts` database table with the subscription ID, tenant ID, full error stack trace, and attempt audit trail.
+  - Auditable via `jobAlertRepository.js` and included in job execution summary.
+
+---
+
+## 9. Explicit Non-Goals
 1. **No External Model Invocations:** AI token metrics are simulated via request parameters or measured directly from input payload length; no external API key is needed.
 2. **No Real Credit Card Processing:** All payments run through Stripe Test Mode (`sk_test_...` and test card `4242 4242 4242 4242`).
 3. **No Multi-Currency FX Rates:** All billing is evaluated in USD and stored in microcents.
