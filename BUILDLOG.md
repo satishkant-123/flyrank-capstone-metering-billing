@@ -74,11 +74,11 @@ This capstone was constructed using AI pair-programming with the DeepMind Antigr
 - **What I Changed:**  
   Implemented `executeWithRetry()` with 3 attempts and exponential backoff (`delay = baseDelay * 2^(attempt-1)`). Temporary network blips resolve on retry #2, avoiding false positive alerts.
 
-### 3.7. Background Job Failure Alert Table
+### 3.7. Background Job Failure Alert Table & Repository
 - **What AI Initially Wrote:**  
   Failed background jobs only printed to `console.error`.
 - **What I Changed:**  
-  Created the `job_failure_alerts` schema table and `JobAlertRepository` to record persistent job failures as structured database records when retries are exhausted.
+  Created the `job_failure_alerts` schema table and `JobFailureAlertRepository` (wired through `JobAlertRepository`) to record persistent job failures as structured database records when retries are exhausted.
 
 ---
 

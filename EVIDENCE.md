@@ -488,6 +488,7 @@ Content-Type: application/json; charset=utf-8
 | **PROBE 2** | Drive tenant to exact quota $\rightarrow$ boundary behaves per rule; subsequent call returns 429 / 402 with message. | **PASS** | `test/integration/boundary_quota.test.js` & `verify_probes.js` |
 | **PROBE 3** | Complete Stripe test Checkout $\rightarrow$ webhook flips tenant Free $\rightarrow$ Pro; GET /usage reflects new limits. | **PASS** | `test/integration/stripe_webhook.test.js` & `verify_probes.js` |
 | **PROBE 4** | Send forged webhook (bad signature) $\rightarrow$ 400, no DB change. Replay real event twice $\rightarrow$ processed once. | **PASS** | `test/integration/stripe_webhook.test.js` & `verify_probes.js` |
+| **PROBE 5** | Check pinned pricing rules $\rightarrow$ cached-input and reasoning-token rules produce exact expected totals; GET /usage matches. | **PASS** | `test/unit/pricing.test.js` & `scripts/verify_probes.js` |
 ### Full Test Suite Output (21/21 Passed):
 ```
 ✔ PROBE 2: Drive a tenant to its exact quota (999 -> 1000 -> 1001) with 429 response (7.22ms)

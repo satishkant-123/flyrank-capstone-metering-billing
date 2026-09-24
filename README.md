@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-green.svg)](https://nodejs.org/)
 
-A production-grade, multi-tenant **Usage Metering & Billing Engine** designed for AI and SaaS platforms. Built with strictly verified **idempotency**, **pre-operation quota enforcement** (429 / 402), **exact integer money math** (microcents), and **signature-verified Stripe subscription integration** (test mode).
+A resilient, multi-tenant **Usage Metering & Billing Engine** designed for AI and SaaS platforms. Built with strictly verified **idempotency**, **pre-operation quota enforcement** (429 / 402), **exact integer money math** (microcents), and **signature-verified Stripe subscription integration** (test mode).
 
 ---
 
@@ -71,7 +71,11 @@ A production-grade, multi-tenant **Usage Metering & Billing Engine** designed fo
                  ┌──────────────────────────────────────────────┐
                  │       Persistence Layer (Repositories)       │
                  │       ACID SQLite with Foreign Keys & WAL    │
-                 │   (8 Core Tables - schema details below)     │
+                 │                                              │
+                 │  - tenants           - idempotency_keys      │
+                 │  - plans             - processed_webhooks    │
+                 │  - subscriptions     - usage_alerts          │
+                 │  - usage_events      - job_failure_alerts    │
                  └──────────────────────────────────────────────┘
 ```
 
