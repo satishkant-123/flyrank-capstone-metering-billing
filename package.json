@@ -1,0 +1,24 @@
+{
+  "name": "flyrank-capstone-metering-billing",
+  "version": "1.0.0",
+  "description": "Usage Metering & Billing Engine with Idempotency, Quotas, AI Token Pricing, and Stripe Integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/**/*.test.js"
+  },
+  "keywords": [
+    "metering",
+    "billing",
+    "stripe",
+    "idempotency",
+    "quotas"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "stripe": "^22.6.2"
+  }
+}
