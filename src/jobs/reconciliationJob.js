@@ -1,7 +1,7 @@
 const SubscriptionRepository = require('../repositories/subscriptionRepository');
 const TenantRepository = require('../repositories/tenantRepository');
 const StripeService = require('../services/stripeService');
-const JobAlertRepository = require('../repositories/jobAlertRepository');
+const JobFailureAlertRepository = require('../repositories/jobFailureAlertRepository');
 
 class ReconciliationJob {
   constructor(deps = {}) {
@@ -9,7 +9,7 @@ class ReconciliationJob {
     this.subRepo = deps.subRepo || new SubscriptionRepository(this._db);
     this.tenantRepo = deps.tenantRepo || new TenantRepository(this._db);
     this.stripeService = deps.stripeService || new StripeService();
-    this.jobAlertRepo = deps.jobAlertRepo || new JobAlertRepository(this._db);
+    this.jobAlertRepo = deps.jobAlertRepo || new JobFailureAlertRepository(this._db);
   }
 
   /**
