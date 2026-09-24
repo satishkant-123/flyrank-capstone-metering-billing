@@ -24,8 +24,8 @@ A production-grade, multi-tenant **Usage Metering & Billing Engine** designed fo
    Supports Stripe Checkout subscription flows (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`), with raw-buffer cryptographic signature verification and event deduplication.
 5. **Usage Rollups & Invoicing:**  
    `GET /usage` returns live monthly aggregates, quota balances, token category breakdowns, and projected itemized invoices.
-6. **Background Automation:**  
-   Includes a nightly **Reconciliation Job** comparing database state against Stripe's subscription truth to heal dropped webhooks, and an **Alert Job** notifying when tenants cross 80% and 100% of their quota.
+6. **Background Automation & Retries:**  
+   Includes a nightly **Reconciliation Job** comparing database state against Stripe's subscription truth to heal dropped webhooks (featuring 3-attempt exponential backoff and persistent alerts logged in `job_failure_alerts`), and an **Alert Job** notifying when tenants cross 80% and 100% of their quota.
 
 ---
 
@@ -71,9 +71,20 @@ A production-grade, multi-tenant **Usage Metering & Billing Engine** designed fo
                  ┌──────────────────────────────────────────────┐
                  │       Persistence Layer (Repositories)       │
                  │       ACID SQLite with Foreign Keys & WAL    │
-                 │ (tenants, plans, subscriptions, usage_events)│
+                 │   (8 Core Tables - schema details below)     │
                  └──────────────────────────────────────────────┘
 ```
+
+### 3.1. Relational Database Tables
+
+1. **`tenants`**: Isolated tenant accounts, plan tier, and Stripe customer mapping.
+2. **`plans`**: Tier definitions (`free`, `pro`), monthly token/API limits, and base fees.
+3. **`subscriptions`**: Billing cycle timestamps (`current_period_start`, `end`), Stripe subscription ID, and status (`active`, `past_due`, `canceled`).
+4. **`usage_events`**: Immutable ledger of metered usage, token category breakdown, and integer microcents cost.
+5. **`idempotency_keys`**: Request payload SHA-256 hash, cached response body, and status for replay deduplication.
+6. **`processed_webhook_events`**: Cryptographic event IDs (`evt_...`) ensuring exactly-once webhook processing.
+7. **`usage_alerts`**: Tracks dispatched quota threshold notifications (80% and 100%).
+8. **`job_failure_alerts`**: Persistent audit record for background jobs after retry exhaustion (3 attempts), recording `job_name`, `error_message`, and `attempts`.
 
 ---
 
