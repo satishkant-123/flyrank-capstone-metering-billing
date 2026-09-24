@@ -18,17 +18,26 @@ class StripeService {
   async createCheckoutSession({ tenantId, successUrl, cancelUrl }) {
     const success = successUrl || `${config.baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel = cancelUrl || `${config.baseUrl}/checkout/cancel`;
-
     try {
+      const lineItems = this.proPriceId && this.proPriceId.startsWith('price_') && !this.proPriceId.includes('mock')
+        ? [{ price: this.proPriceId, quantity: 1 }]
+        : [{
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'Pro Tier Subscription',
+                description: '50,000 API calls & 10,000,000 AI tokens per month',
+              },
+              unit_amount: 2900, // $29.00 / month
+              recurring: { interval: 'month' },
+            },
+            quantity: 1,
+          }];
+
       const session = await this.stripe.checkout.sessions.create({
         mode: 'subscription',
         payment_method_types: ['card'],
-        line_items: [
-          {
-            price: this.proPriceId,
-            quantity: 1,
-          },
-        ],
+        line_items: lineItems,
         metadata: {
           tenant_id: tenantId,
         },
