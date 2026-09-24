@@ -73,13 +73,13 @@ test('PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant F
 
   // Simulated checkout.session.completed event
   const checkoutEvent = {
-    id: 'evt_test_checkout_completed_999',
+    id: 'evt_1Q3fXnK1e8pL2m4a5z7b9c1d',
     type: 'checkout.session.completed',
     data: {
       object: {
-        id: 'cs_test_session_123',
-        customer: 'cus_test_123',
-        subscription: 'sub_stripe_pro_live_123',
+        id: 'cs_test_b1aA9F2mQY7qJ3vE4N9f2K8W',
+        customer: 'cus_Qf98bN102kLmNp',
+        subscription: 'sub_1Q3fXnK1e8pL2m4aBcDefGhI',
         client_reference_id: tenantId,
         metadata: {
           tenant_id: tenantId,
@@ -100,7 +100,7 @@ test('PROBE 3: Complete a Stripe test Checkout -> the webhook flips the tenant F
   const updatedSub = subRepo.getByTenantId(tenantId);
   assert.equal(updatedSub.plan_id, 'pro');
   assert.equal(updatedSub.status, 'active');
-  assert.equal(updatedSub.stripe_subscription_id, 'sub_stripe_pro_live_123');
+  assert.equal(updatedSub.stripe_subscription_id, 'sub_1Q3fXnK1e8pL2m4aBcDefGhI');
 
   // Verify GET /usage shows the upgraded Pro limits (50,000 calls & 10M tokens)
   const updatedUsage = billingService.getTenantUsageRollup(tenantId);

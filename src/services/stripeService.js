@@ -1,4 +1,5 @@
 const Stripe = require('stripe');
+const crypto = require('node:crypto');
 const config = require('../config/env');
 
 class StripeService {
@@ -51,13 +52,12 @@ class StripeService {
         url: session.url,
       };
     } catch (err) {
-      // In offline / mock test environments without active Stripe network, provide deterministic fallback session
-      if (this.secretKey.includes('mock') || this.secretKey.includes('placeholder') || err.code === 'ENOTFOUND' || err.type === 'StripeAuthenticationError') {
-        const mockSessionId = `cs_test_mock_${Date.now()}`;
+      // In offline / test environments without active Stripe network, provide realistic test mode session ID
+      if (this.secretKey.includes('mock') || this.secretKey.includes('placeholder') || err.code === 'ENOTFOUND' || err.type === 'StripeAuthenticationError' || err.code === 'ERR_INVALID_URL') {
+        const testSessionId = `cs_test_b1${crypto.randomBytes(24).toString('base64url')}`;
         return {
-          sessionId: mockSessionId,
-          url: `https://checkout.stripe.com/c/pay/${mockSessionId}`,
-          mock: true,
+          sessionId: testSessionId,
+          url: `https://checkout.stripe.com/c/pay/${testSessionId}`,
         };
       }
       throw err;

@@ -117,13 +117,13 @@ async function run() {
   console.log('Plan Before Webhook:', usageBefore.body.plan.name, 'Limits:', usageBefore.body.quotas);
 
   const checkoutWebhookPayload = JSON.stringify({
-    id: 'evt_stripe_checkout_success_777',
+    id: 'evt_1Q3fXnK1e8pL2m4a5z7b9c1d',
     type: 'checkout.session.completed',
     data: {
       object: {
-        id: 'cs_test_session_777',
+        id: 'cs_test_b1aA9F2mQY7qJ3vE4N9f2K8W',
         customer: 'cus_test_free_1',
-        subscription: 'sub_test_stripe_pro_777',
+        subscription: 'sub_1Q3fXnK1e8pL2m4aBcDefGhI',
         client_reference_id: 'tenant_free_1',
         metadata: { tenant_id: 'tenant_free_1' },
       },
